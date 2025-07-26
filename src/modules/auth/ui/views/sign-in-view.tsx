@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle } from "@/components/ui/alert";
+import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
   email: z.email({
@@ -33,6 +34,7 @@ const formSchema = z.object({
 export const SignInView = () => {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -55,6 +57,7 @@ export const SignInView = () => {
       {
         onSuccess: () => {
           setPending(false);
+          router.push('/')
         },
 
         onError: ({ error }) => {
