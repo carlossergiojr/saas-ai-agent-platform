@@ -1,13 +1,9 @@
-import z from "zod";
-import { toast } from "sonner";
-import { useForm } from "react-hook-form";
+import { AgentGetOne } from "@/modules/agents/types";
+import { useTRPC } from "@/trpc/client";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-
-import { useTRPC } from "@/trpc/client";
-
-import { AgentGetOne } from "../../types";
-import { agentsInsertSchema } from "../../schemas";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   Form,
   FormControl,
@@ -16,24 +12,24 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { GeneratedAvatar } from "@/components/generated-avatar";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { agentsInsertSchema } from "../../schemas";
 
-interface AgentFormProps {
+type Props = {
   onSuccess?: () => void;
   onCancel?: () => void;
   initialValues?: AgentGetOne;
-}
+};
 
-export const AgentForm = ({
-  onSuccess,
-  onCancel,
-  initialValues,
-}: AgentFormProps) => {
+export const AgentForm = ({ onSuccess, onCancel, initialValues }: Props) => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const createAgent = useMutation(
     trpc.agents.create.mutationOptions({
@@ -42,19 +38,34 @@ export const AgentForm = ({
           trpc.agents.getMany.queryOptions({})
         );
 
+        onSuccess?.();
+      },
+      onError: (error) => {
+        toast.error(error.message);
+
+        console.log("ERROR DATA IN AGENT FORM: ", error.data);
+
+        if (error.data?.code === "FORBIDDEN") {
+          router.push("/upgrade");
+        }
+      },
+    })
+  );
+
+  const updateAgent = useMutation(
+    trpc.agents.update.mutationOptions({
+      onSuccess: async () => {
+        queryClient.invalidateQueries(trpc.agents.getMany.queryOptions({}));
+
         if (initialValues?.id) {
           await queryClient.invalidateQueries(
             trpc.agents.getOne.queryOptions({ id: initialValues.id })
           );
         }
-
         onSuccess?.();
       },
-
       onError: (error) => {
         toast.error(error.message);
-
-        // TODO: Check if error code is "FORBIDDEN", redirect to "/upgrade"
       },
     })
   );
@@ -68,72 +79,67 @@ export const AgentForm = ({
   });
 
   const isEdit = !!initialValues?.id;
-  const isPending = createAgent.isPending;
+  const isPending = createAgent.isPending || updateAgent.isPending;
 
   const onSubmit = (values: z.infer<typeof agentsInsertSchema>) => {
     if (isEdit) {
-      console.log("TODO: updateAgent");
+      updateAgent.mutate({ ...values, id: initialValues.id });
     } else {
       createAgent.mutate(values);
     }
   };
 
   return (
-    <Form {...form}>
-      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-        <GeneratedAvatar
-          seed={form.watch("name")}
-          variant="botttsNeutral"
-          className="size-16 border"
-        />
-        <FormField
-          name="name"
-          control={form.control}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Name</FormLabel>
-              <FormControl>
-                <Input {...field} placeholder="e.g. Math tutor" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          name="instructions"
-          control={form.control}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Instructions</FormLabel>
-              <FormControl>
-                <Textarea
-                  {...field}
-                  placeholder="You are a helpful math assistant that can answer questions and help with assignments."
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex justify-between gap-x-2">
-          {onCancel && (
-            <Button
-              variant="ghost"
-              disabled={isPending}
-              type="button"
-              onClick={() => onCancel()}
-            >
-              Cancel
+    <div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <GeneratedAvatar seed={form.watch("name")} variant="botttsNeutral" />
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="E.g John" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="instructions"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Instructions</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="You are a helpful assistant that can answer questions and help with tasks."
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="flex justify-between gap-x-2 mt-4">
+            {onCancel && (
+              <Button
+                variant="ghost"
+                disabled={isPending}
+                type={"button"}
+                onClick={() => onCancel()}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button disabled={isPending} type="submit">
+              {isEdit ? "Update" : "Create"}
             </Button>
-          )}
-
-          <Button disabled={isPending} type="submit">
-            {isEdit ? "Update" : "Create"}
-          </Button>
-        </div>
-      </form>
-    </Form>
+          </div>
+        </form>
+      </Form>
+    </div>
   );
 };
